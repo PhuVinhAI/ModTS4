@@ -125,8 +125,15 @@ Running `compile.py` while dev mode is active removes the `Scripts/` folder, eff
 **Modes:**
 - `--game` — Decompiles game scripts from `gameplay_folder_data` and `gameplay_folder_game`
 - `--folder` — Decompiles zips placed in `decompile/input/`
+- `--mod PATH` — Decompiles all `.ts4script` and `.zip` archives found recursively in an installed mod folder
 
-**Output:** `decompile/output/python/`
+**Output:**
+- Game and input-folder modes: `decompile/output/python/`
+- Installed mod mode: `decompile/output/mods/{installed-folder-name}/python/`
+
+For installed mods, the output folder name is exactly the source folder's basename. Each script archive gets its own folder under `python/`, and `manifest.json` records the absolute source folder plus relative script archive and `.package` paths. Package files are listed for later datamining but are not treated as Python bytecode.
+
+Re-running `--mod` replaces only that mod's generated output folder so removed or renamed archives cannot leave stale source behind. Validation happens before replacement: a missing source directory or a directory without `.ts4script`/`.zip` archives fails without changing existing output.
 
 ### 11.2 Decompiler Fallback Chain
 
@@ -139,16 +146,26 @@ Each `.pyc` file is attempted with decompilers in sequence. The first successful
 
 Each decompiler gets `decompiler_timeout` seconds per file (default: 30s).
 
+A decompiler process exit code is not sufficient to mark an output successful. Generated source must also parse as Python. Syntax-invalid output triggers the next fallback; if no fallback produces valid syntax, the best available output is retained and labeled `(incomplete)`.
+
 ### 9.3 Failure Handling
 
 - If all decompilers fail, a stub file is written with a comment indicating failure
+- Syntax-invalid source is never reported as a complete decompilation
 - Runaway indentation (>200 levels) is detected and the decompiler process is killed
+- The timeout also applies while a streaming decompiler is silent or still producing output
 - Progress is printed as `.` (success) or `X` (failure), wrapping at 80 columns
 - Per-zip and aggregate statistics are printed at completion
 
 ### 9.4 Environment Setup
 
 `decompile_pre()` creates a virtual environment and installs decompiler packages (`decompyle3`, `uncompyle6`). The venv is created once and reused.
+
+The `unpyc37` submodule uses its maintained fork at a Python 3.7-compatible revision. The decompiler entry point is `unpyc37/src/unpyc3.py`.
+
+CLI tools are resolved from the active Python environment's scripts folder, including platform-specific executable extensions such as `.exe`. On Windows, extensionless Python scripts are invoked through the active Python executable.
+
+The multiprocessing manager is initialized lazily when decompilation begins. Importing `util.decompile` must not start child processes, so the CLI remains compatible with the Windows `spawn` start method.
 
 ---
 

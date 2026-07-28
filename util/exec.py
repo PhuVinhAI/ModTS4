@@ -14,13 +14,20 @@
 
 from subprocess import run, CompletedProcess, TimeoutExpired
 import os.path, traceback
-from typing import Tuple, Union
+from typing import List, Tuple, Union
 from util.path import get_sys_path, get_sys_scripts_folder, get_full_filepath
 
 from settings import decompiler_timeout
 
 
-def exec_cli(package: str, args: [str], **kwargs) -> Tuple[bool, Union[CompletedProcess, TimeoutExpired, None]]:
+def _command_for_file(file_path: str, args: List[str]) -> List[str]:
+    extension = os.path.splitext(file_path)[1].lower()
+    if os.name == "nt" and extension in ("", ".py", ".pyw"):
+        return [get_sys_path(), file_path, *args]
+    return [file_path, *args]
+
+
+def exec_cli(package: str, args: List[str], **kwargs) -> Tuple[bool, Union[CompletedProcess, TimeoutExpired, None]]:
     """
     Executes the cli version of an installed python package
 
@@ -29,13 +36,19 @@ def exec_cli(package: str, args: [str], **kwargs) -> Tuple[bool, Union[Completed
     :return: Returns tuple of (boolean indicating success, the CompletedProcess object)
     """
     if os.path.isfile(package):
-        cmd_list = [package, *args]
+        cmd_list = _command_for_file(package, args)
     elif package == "python3":
         cmd_list = [get_sys_path(), *args]
     else:
-        script_path = os.path.join(get_sys_scripts_folder(), package)
-        if os.path.isfile(script_path):
-            cmd_list = [script_path, *args]
+        scripts_folder = get_sys_scripts_folder()
+        script_path = os.path.join(scripts_folder, package)
+        if not os.path.isfile(script_path):
+            try:
+                script_path = get_full_filepath(scripts_folder, package)
+            except FileNotFoundError:
+                script_path = None
+        if script_path:
+            cmd_list = _command_for_file(script_path, args)
         else:
             cmd_list = [get_sys_path(), "-m", package, *args]
     try:

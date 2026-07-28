@@ -13,9 +13,9 @@
 #    limitations under the License.
 
 # core imports
-import contextlib, fnmatch, os, shutil, signal, tempfile, traceback
+import contextlib, fnmatch, json, os, shutil, signal, tempfile, traceback
 from pathlib import Path
-from subprocess import Popen, PIPE, CompletedProcess
+from subprocess import Popen, PIPE, CompletedProcess, TimeoutExpired
 from typing import Tuple, List
 from zipfile import PyZipFile
 
@@ -26,7 +26,7 @@ from multiprocessing.sharedctypes import Value
 # Helpers
 from util.exec import exec_cli
 from util.path import ensure_path_created, get_default_executable_extension, get_file_stem, get_rel_path,\
-    replace_extension
+    remove_dir, replace_extension
 from util.time import get_minutes, get_time, get_time_str
 from util import process_module
 from util.venv import Venv
@@ -47,9 +47,9 @@ class TotalStats(Structure):
 
 # Global counts and timings for all the tasks
 totals = Value(TotalStats, 0, 0, 0, 0)
-_manager = Manager()
-total_failed_files = _manager.list()
-unpyc3_path = os.path.join(Path(__file__).resolve().parent.parent, "unpyc37", "unpyc3.py")
+_manager = None
+total_failed_files = []
+unpyc3_path = os.path.join(Path(__file__).resolve().parent.parent, "unpyc37", "src", "unpyc3.py")
 pycdc_path = os.path.join(Path(__file__).resolve().parent.parent, "pycdc", "pycdc") + get_default_executable_extension()
 
 
@@ -136,22 +136,31 @@ def streaming_decompile(cmd: str, args: List[str], dest_path: str) -> Tuple[bool
         proc = Popen([cmd] + args, stdout=PIPE, stderr=PIPE, text=True, encoding="utf-8")
     except Exception:
         return False, 0
-    lines_written = 0
     try:
-        with open(dest_path, "w", encoding="utf-8") as f:
-            for line in proc.stdout:
-                indent = len(line) - len(line.lstrip())
-                if indent > _max_indent:
-                    # Runaway indentation detected — kill the process and keep what we have
-                    proc.kill()
-                    break
-                f.write(line)
-                lines_written += 1
-        proc.wait(timeout=decompiler_timeout)
-    except Exception:
+        stdout, _ = proc.communicate(timeout=decompiler_timeout)
+    except TimeoutExpired:
         proc.kill()
-        proc.wait()
+        stdout, _ = proc.communicate()
+
+    lines_written = 0
+    with open(dest_path, "w", encoding="utf-8") as f:
+        for line in (stdout or "").splitlines(keepends=True):
+            indent = len(line) - len(line.lstrip())
+            if indent > _max_indent:
+                break
+            f.write(line)
+            lines_written += 1
     return lines_written > 0, lines_written
+
+
+def _has_valid_python_syntax(file_path: str) -> bool:
+    try:
+        with open(file_path, "r", encoding="utf-8") as file:
+            source = file.read()
+        compile(source, file_path, "exec")
+    except (OSError, SyntaxError, UnicodeError, ValueError):
+        return False
+    return True
 
 
 def decompile_worker(src_file: str, dest_path: str):
@@ -196,13 +205,16 @@ def decompile_worker(src_file: str, dest_path: str):
 
     try:
         success, result = stdout_decompile("python3", [unpyc3_path, src_file], file_to_write())
+        success = success and _has_valid_python_syntax(dest_files[which])
         update_line_count("unpyc3")
 
         if not success:
             success, result = exec_cli("decompyle3", ["--verify", "syntax", "-o", file_to_write(), src_file])
+            success = success and _has_valid_python_syntax(dest_files[which])
             update_line_count("decompyle3")
         if not success:
             success, result = exec_cli("uncompyle6", ["-o", file_to_write(), src_file])
+            success = success and _has_valid_python_syntax(dest_files[which])
             update_line_count("uncompyle6")
         if not success and os.path.isfile(pycdc_path):
             dest = file_to_write()
@@ -210,6 +222,7 @@ def decompile_worker(src_file: str, dest_path: str):
             dest_decompilers[which] = "pycdc"
             if wrote_code:
                 dest_lines[which] = line_count
+            success = wrote_code and _has_valid_python_syntax(dest)
 
         if success:
             successful_decompiler = dest_decompilers[which]
@@ -256,6 +269,14 @@ def init_process(stats, total, failed_files):
     process_module.stats = stats
     process_module.total_stats = total
     process_module.failed_files = failed_files
+
+
+def _ensure_manager():
+    global _manager, total_failed_files
+    if _manager is None:
+        _manager = Manager()
+        total_failed_files = _manager.list()
+    return total_failed_files
 
 
 def _prepare_zip(src_dir: str, zip_name: str, dst_dir: str):
@@ -337,10 +358,11 @@ def decompile_zips(src_dirs, dst_dir: str) -> None:
 
     time_start = get_time()
     task_stats = Value(Stats, 0, 0, 0, 0)
+    failed_files = _ensure_manager()
 
     print(f"Decompiling {len(all_to_decompile)} files...")
 
-    with Pool(num_threads, init_process, (task_stats, totals, total_failed_files)) as pool:
+    with Pool(num_threads, init_process, (task_stats, totals, failed_files)) as pool:
         pool.starmap(decompile_worker, all_to_decompile, chunksize=1)
 
     time_end = get_time()
@@ -358,6 +380,67 @@ def decompile_zips(src_dirs, dst_dir: str) -> None:
     for tmp_dir in tmp_dirs:
         with contextlib.suppress(Exception):
             tmp_dir.cleanup()
+
+
+def _discover_mod_files(mod_folder: str) -> Tuple[List[str], List[str]]:
+    """Return relative script archive and package paths found in a mod folder."""
+    script_archives = []
+    package_files = []
+
+    for root, dirs, files in os.walk(mod_folder):
+        dirs.sort()
+        for filename in sorted(files):
+            full_path = os.path.join(root, filename)
+            relative_path = get_rel_path(full_path, mod_folder)
+            extension = os.path.splitext(filename)[1].lower()
+            if extension in (".ts4script", ".zip"):
+                script_archives.append(relative_path)
+            elif extension == ".package":
+                package_files.append(relative_path)
+
+    return script_archives, package_files
+
+
+def decompile_mod_folder(mod_folder: str, decompile_output_folder: str) -> str:
+    """Decompile an installed mod into an isolated, reproducible output folder."""
+    source_folder = str(Path(mod_folder).expanduser().resolve())
+    if not os.path.isdir(source_folder):
+        raise NotADirectoryError("Mod folder does not exist: " + source_folder)
+
+    mod_name = Path(source_folder).name
+    if not mod_name:
+        raise ValueError("Mod folder must have a directory name")
+
+    script_archives, package_files = _discover_mod_files(source_folder)
+    if not script_archives:
+        raise FileNotFoundError(
+            "No script archive (.ts4script or .zip) found in mod folder: "
+            + source_folder
+        )
+
+    output_folder = os.path.join(decompile_output_folder, "mods", mod_name)
+    python_output = os.path.join(output_folder, "python")
+
+    # This directory is generated output owned by this workflow. Replacing it
+    # prevents removed or renamed archives from leaving stale source behind.
+    remove_dir(output_folder)
+    ensure_path_created(python_output)
+
+    manifest = {
+        "format_version": 1,
+        "mod_name": mod_name,
+        "source_folder": source_folder,
+        "script_archives": script_archives,
+        "package_files": package_files,
+        "python_output": "python",
+    }
+    manifest_path = os.path.join(output_folder, "manifest.json")
+    with open(manifest_path, "w", encoding="utf-8") as file:
+        json.dump(manifest, file, ensure_ascii=False, indent=2)
+        file.write("\n")
+
+    decompile_zips(source_folder, python_output)
+    return output_folder
 
 
 def decompile_print_totals() -> None:

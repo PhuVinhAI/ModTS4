@@ -1,6 +1,9 @@
+import json
 import os
+import time
 from ctypes import Structure, c_uint
 from multiprocessing.sharedctypes import Value
+from subprocess import CompletedProcess
 
 import pytest
 
@@ -12,6 +15,11 @@ def _mock_settings(mock_settings):
 
 
 class TestStats:
+    def test_manager_is_not_started_during_import(self):
+        import util.decompile as decompile_mod
+
+        assert decompile_mod._manager is None
+
     def test_stats_structure(self):
         from util.decompile import Stats
         s = Value(Stats, 0, 0, 0, 0)
@@ -207,6 +215,20 @@ class TestStreamingDecompile:
         assert wrote is False
         assert lines == 0
 
+    def test_kills_silent_process_on_timeout(self, tmp_path, mock_settings):
+        from util.decompile import streaming_decompile
+
+        mock_settings.decompiler_timeout = 0.1
+        dest = str(tmp_path / "output.py")
+        started = time.monotonic()
+        wrote, lines = streaming_decompile(
+            "python3", ["-c", "import time; time.sleep(10)"], dest
+        )
+
+        assert time.monotonic() - started < 2
+        assert wrote is False
+        assert lines == 0
+
 
 class TestPrepareZip:
     def _make_zip(self, tmp_path, zip_name, pyc_files):
@@ -331,6 +353,40 @@ class TestDecompileWorker:
         # Should start with a decompiler header comment
         assert first_line.startswith("# Decompil")
 
+    def test_syntax_invalid_output_uses_next_fallback(
+        self, tmp_path, _init_worker, monkeypatch
+    ):
+        import util.decompile as decompile_mod
+
+        src = str(tmp_path / "test.pyc")
+        with open(src, "wb") as file:
+            file.write(b"fake bytecode")
+        dest = str(tmp_path / "test.py")
+
+        def invalid_stdout_decompile(cmd, args, dest_path):
+            with open(dest_path, "w", encoding="utf-8") as file:
+                file.write("if value BAD 0:\n    pass\n")
+            return True, CompletedProcess([cmd], 0, "", "")
+
+        def valid_exec_cli(package, args):
+            output_path = args[3]
+            with open(output_path, "w", encoding="utf-8") as file:
+                file.write("value = 42\n")
+            return True, CompletedProcess([package], 0, "", "")
+
+        monkeypatch.setattr(
+            decompile_mod, "stdout_decompile", invalid_stdout_decompile
+        )
+        monkeypatch.setattr(decompile_mod, "exec_cli", valid_exec_cli)
+
+        decompile_mod.decompile_worker(src, dest)
+
+        with open(dest, encoding="utf-8") as file:
+            content = file.read()
+        assert content.startswith("# Decompiled with decompyle3\n")
+        assert "value = 42" in content
+        assert "BAD" not in content
+
 
 class TestDecompileZips:
     def test_accepts_string_src_dir(self, tmp_path):
@@ -352,3 +408,78 @@ class TestDecompileZips:
         os.makedirs(dst, exist_ok=True)
         # Empty directories — should return without error
         decompile_zips([dir_a, dir_b], dst)
+
+
+class TestDecompileModFolder:
+    def test_creates_named_output_manifest_and_python_folder(self, tmp_path, monkeypatch):
+        import util.decompile as decompile_mod
+
+        mod_name = "SimRealist_-_SimNationalBank_3.2.1.1"
+        mod_folder = tmp_path / "Mods" / mod_name
+        nested = mod_folder / "Scripts"
+        nested.mkdir(parents=True)
+        script_archive = nested / "bank_core.ts4script"
+        package_file = mod_folder / "bank_data.package"
+        script_archive.write_bytes(b"archive")
+        package_file.write_bytes(b"package")
+
+        output_root = tmp_path / "decompile" / "output"
+        old_output = output_root / "mods" / mod_name
+        old_output.mkdir(parents=True)
+        stale_file = old_output / "stale.py"
+        stale_file.write_text("stale")
+
+        calls = []
+        monkeypatch.setattr(
+            decompile_mod,
+            "decompile_zips",
+            lambda src, dst: calls.append((src, dst)),
+        )
+
+        result = decompile_mod.decompile_mod_folder(
+            str(mod_folder), str(output_root)
+        )
+
+        expected_output = output_root / "mods" / mod_name
+        expected_python = expected_output / "python"
+        assert result == str(expected_output)
+        assert not stale_file.exists()
+        assert expected_python.is_dir()
+        assert calls == [(str(mod_folder.resolve()), str(expected_python))]
+
+        with open(str(expected_output / "manifest.json"), encoding="utf-8") as file:
+            manifest = json.load(file)
+        assert manifest == {
+            "format_version": 1,
+            "mod_name": mod_name,
+            "source_folder": str(mod_folder.resolve()),
+            "script_archives": [os.path.join("Scripts", "bank_core.ts4script")],
+            "package_files": ["bank_data.package"],
+            "python_output": "python",
+        }
+
+    def test_missing_mod_folder_is_rejected(self, tmp_path):
+        from util.decompile import decompile_mod_folder
+
+        with pytest.raises(NotADirectoryError):
+            decompile_mod_folder(
+                str(tmp_path / "missing"), str(tmp_path / "output")
+            )
+
+    def test_no_script_archive_preserves_existing_output(self, tmp_path):
+        from util.decompile import decompile_mod_folder
+
+        mod_folder = tmp_path / "Mods" / "PackageOnlyMod"
+        mod_folder.mkdir(parents=True)
+        (mod_folder / "content.package").write_bytes(b"package")
+
+        output_root = tmp_path / "decompile" / "output"
+        existing_output = output_root / "mods" / mod_folder.name
+        existing_output.mkdir(parents=True)
+        sentinel = existing_output / "keep.txt"
+        sentinel.write_text("keep")
+
+        with pytest.raises(FileNotFoundError, match="script archive"):
+            decompile_mod_folder(str(mod_folder), str(output_root))
+
+        assert sentinel.read_text() == "keep"

@@ -16,20 +16,29 @@
 import multiprocessing
 import argparse
 
-from util.decompile import decompile_pre, decompile_zips, decompile_print_totals
-from settings import gameplay_folder_data, gameplay_folder_game, projects_python_path
+from util.decompile import decompile_mod_folder, decompile_pre, decompile_zips, decompile_print_totals
+from settings import decompile_output_folder, gameplay_folder_data, gameplay_folder_game, projects_python_path
 
-if __name__ == "__main__":
-    multiprocessing.freeze_support()
 
+def build_parser():
     parser = argparse.ArgumentParser(description="Decompile script")
-    parser.add_argument('--folder', action='store_true', help="Decompile all files in the decompile folder")
-    parser.add_argument('--game', action='store_true', help="Decompile game files")
-    args = parser.parse_args()
+    modes = parser.add_mutually_exclusive_group(required=True)
+    modes.add_argument(
+        '--folder', action='store_true',
+        help="Decompile archives placed in decompile/input",
+    )
+    modes.add_argument('--game', action='store_true', help="Decompile game files")
+    modes.add_argument(
+        '--mod', metavar='MOD_FOLDER',
+        help="Decompile an installed mod folder into decompile/output/mods",
+    )
+    return parser
 
-    if not args.folder and not args.game:
-        parser.print_help()
-        exit(1)
+
+def main(argv=None):
+    multiprocessing.freeze_support()
+    parser = build_parser()
+    args = parser.parse_args(argv)
 
     # Do a pre-setup
     decompile_pre()
@@ -45,6 +54,17 @@ if __name__ == "__main__":
         decompile_zips("./decompile/input", projects_python_path)
     elif args.game:
         decompile_zips([gameplay_folder_data, gameplay_folder_game], projects_python_path)
+    else:
+        try:
+            output_folder = decompile_mod_folder(args.mod, decompile_output_folder)
+        except (OSError, ValueError) as error:
+            parser.error(str(error))
+        print("Mod source written to: " + output_folder)
 
     # Print final statistics
     decompile_print_totals()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

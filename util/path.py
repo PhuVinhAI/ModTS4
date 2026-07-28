@@ -85,11 +85,11 @@ def get_sys_scripts_folder() -> str:
     """
     path = get_sys_folder()
     if os.name == 'nt':  # Windows
-        if not path.endswith('bin'):
-            return os.path.join(path, 'Scripts')
-        return path
+        if os.path.basename(path).lower() in ('scripts', 'bin'):
+            return path
+        return os.path.join(path, 'Scripts')
     else:  # Unix-based systems
-        if not path.endswith('bin'):
+        if os.path.basename(path) != 'bin':
             path = os.path.join(path, 'bin')
         return path
 

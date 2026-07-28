@@ -60,6 +60,15 @@ a pretty progress meter and at the end of each module it decompiled it shows the
 long it took. It does this again at the end of the whole decompilation. It also clears out the old decompiled files for
 you and overall makes everything very smooth and simple.
 
+```sh
+python decompile.py --game
+python decompile.py --folder
+python decompile.py --mod "path/to/Mods/InstalledModFolder"
+```
+
+Installed mods are written to `decompile/output/mods/<installed-folder-name>/`. The generated `manifest.json` lists
+the source script archives and accompanying `.package` files; only `.ts4script`/`.zip` Python bytecode is decompiled.
+
 ### debug_setup.py and debug_teardown.py
 
 These create and remove a debugging environment so that you can debug your game with a real debugger. The only downside

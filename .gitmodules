@@ -1,6 +1,6 @@
 [submodule "unpyc37"]
 	path = unpyc37
-	url = https://github.com/andrew-tavera/unpyc37
+	url = https://github.com/greyblue9/unpyc37-3.10.git
 [submodule "pycdc"]
 	path = pycdc
 	url = https://github.com/zrax/pycdc.git

@@ -1,5 +1,8 @@
 import os
+import ntpath
 import sys
+from subprocess import CompletedProcess
+from types import SimpleNamespace
 import pytest
 
 
@@ -51,6 +54,28 @@ class TestExecCliCommandResolution:
         success, result = exec_cli("fakepkg", [])
         assert success
         assert "console_script" in result.stdout
+
+    def test_windows_console_script_extension_is_resolved(self, tmp_path, monkeypatch):
+        """Windows console entry points have an .exe suffix."""
+        import util.exec as exec_mod
+        from util.exec import exec_cli
+
+        script = tmp_path / "fakepkg.exe"
+        script.touch()
+        calls = []
+
+        windows_os = SimpleNamespace(name="nt", path=ntpath)
+        monkeypatch.setattr(exec_mod, "os", windows_os)
+        monkeypatch.setattr("util.path.os", windows_os)
+        monkeypatch.setattr(exec_mod, "get_sys_scripts_folder", lambda: str(tmp_path))
+        monkeypatch.setattr(exec_mod, "run", lambda command, **kwargs: (
+            calls.append(command) or CompletedProcess(command, 0, "ok", "")
+        ))
+
+        success, result = exec_cli("fakepkg", [])
+
+        assert success
+        assert calls == [[str(script)]]
 
     def test_falls_back_to_dash_m_when_no_script(self, tmp_path, monkeypatch):
         """When no console script exists, fall back to python -m."""

@@ -22,6 +22,7 @@ All scripts are run from the project root with `python <script>`.
 - **`python compile.py`** — Compile `src/` into a `.ts4script` package
 - **`python decompile.py --game`** — Decompile the game's Python scripts
 - **`python decompile.py --folder`** — Decompile zips placed in `decompile/input/`
+- **`python decompile.py --mod <folder>`** — Decompile an installed mod into `decompile/output/mods/<name>/`
 - **`python devmode.py`** — Start dev mode with live file watching
 - **`python cleanup.py`** — Remove all build artifacts and mod installations
 - **`python datamine.py extract <path>`** — Extract tuning XML from a `.package` file

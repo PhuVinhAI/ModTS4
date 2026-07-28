@@ -1,5 +1,8 @@
 import os
+import ntpath
+import posixpath
 import sys
+from types import SimpleNamespace
 import pytest
 
 from util.path import (
@@ -87,41 +90,48 @@ class TestGetSysScriptsFolder:
         assert os.path.isdir(result)
 
     def test_unix_appends_bin(self, monkeypatch):
-        monkeypatch.setattr(os, "name", "posix")
+        monkeypatch.setattr("util.path.os", SimpleNamespace(name="posix", path=posixpath))
         # Simulate a sys folder that doesn't end with 'bin'
         monkeypatch.setattr("util.path.get_sys_folder", lambda: "/usr/local")
         result = get_sys_scripts_folder()
         assert result == "/usr/local/bin"
 
     def test_unix_already_bin(self, monkeypatch):
-        monkeypatch.setattr(os, "name", "posix")
+        monkeypatch.setattr("util.path.os", SimpleNamespace(name="posix", path=posixpath))
         monkeypatch.setattr("util.path.get_sys_folder", lambda: "/usr/local/bin")
         result = get_sys_scripts_folder()
         assert result == "/usr/local/bin"
 
     def test_windows_appends_scripts(self, monkeypatch):
-        monkeypatch.setattr(os, "name", "nt")
+        monkeypatch.setattr("util.path.os", SimpleNamespace(name="nt", path=ntpath))
         monkeypatch.setattr("util.path.get_sys_folder", lambda: "C:\\Python37")
         result = get_sys_scripts_folder()
         assert result == os.path.join("C:\\Python37", "Scripts")
 
     def test_windows_already_bin(self, monkeypatch):
-        monkeypatch.setattr(os, "name", "nt")
+        monkeypatch.setattr("util.path.os", SimpleNamespace(name="nt", path=ntpath))
         monkeypatch.setattr("util.path.get_sys_folder", lambda: "C:\\Python37\\bin")
         result = get_sys_scripts_folder()
         assert result == "C:\\Python37\\bin"
 
+    def test_windows_already_scripts(self, monkeypatch):
+        monkeypatch.setattr("util.path.os", SimpleNamespace(name="nt", path=ntpath))
+        monkeypatch.setattr("util.path.get_sys_folder", lambda: "C:\\project\\.venv\\Scripts")
+        result = get_sys_scripts_folder()
+        assert result == "C:\\project\\.venv\\Scripts"
+
 
 class TestGetFullFilepath:
-    def test_finds_exact_file_unix(self, tmp_path):
+    def test_finds_exact_file_unix(self, tmp_path, monkeypatch):
         # On Unix, get_full_filepath globs for the exact base_name (no wildcard)
+        monkeypatch.setattr("util.path.os", SimpleNamespace(name="posix", path=posixpath))
         (tmp_path / "myfile").write_text("hello")
         result = get_full_filepath(str(tmp_path), "myfile")
         assert result.endswith("myfile")
 
     def test_finds_file_with_extension_windows(self, tmp_path, monkeypatch):
         # On Windows, it globs for base_name.*
-        monkeypatch.setattr(os, "name", "nt")
+        monkeypatch.setattr("util.path.os", SimpleNamespace(name="nt", path=ntpath))
         (tmp_path / "myfile.txt").write_text("hello")
         result = get_full_filepath(str(tmp_path), "myfile")
         assert result.endswith("myfile.txt")
