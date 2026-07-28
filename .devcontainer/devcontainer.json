@@ -1,0 +1,61 @@
+// For format details, see https://aka.ms/devcontainer.json. For config options, see the
+// README at: https://github.com/devcontainers/templates/tree/main/src/python
+{
+	"name": "sims4-workspace",
+	"dockerComposeFile": ["compose.yml"],
+  	"service": "devcontainer",
+	"workspaceFolder": "/workspace",
+	"postCreateCommand": "${containerWorkspaceFolder}/.devcontainer/post-create.sh",
+	"customizations": {
+		"vscode": {
+			"settings": {
+				"editor.formatOnSave": true,
+				"python.autoComplete.extraPaths": [
+					"${containerWorkspaceFolder}/decompile/output/python/base/",
+					"${containerWorkspaceFolder}/decompile/output/python/core/",
+					"${containerWorkspaceFolder}/decompile/output/python/generated/",
+					"${containerWorkspaceFolder}/decompile/output/python/simulation/"
+				],
+				"python.analysis.extraPaths": [
+					"${containerWorkspaceFolder}/decompile/output/python/base/",
+					"${containerWorkspaceFolder}/decompile/output/python/core/",
+					"${containerWorkspaceFolder}/decompile/output/python/generated/",
+					"${containerWorkspaceFolder}/decompile/output/python/simulation/"
+				],
+				"python.analysis.disabled": [
+					"unresolved-import"
+				],
+				"python.analysis.include": [
+					"${containerWorkspaceFolder}/decompile/output/python/base/",
+					"${containerWorkspaceFolder}/decompile/output/python/core/",
+					"${containerWorkspaceFolder}/decompile/output/python/generated/",
+					"${containerWorkspaceFolder}/decompile/output/python/simulation/"
+				]
+			},
+			"extensions": [
+				"ms-python.vscode-pylance"
+			]
+		}
+	},
+	"features": {},
+	"mounts": [
+		// Uncomment one mount type for your use case
+		// ***********************************************
+		// ***********************************************
+		// MacOS mount; You need to add /Applications/EA Games to your VirtioFS - Check Docker Desktop settings
+		//"source=/Applications/EA Games/The Sims 4.app/Contents,target=${containerWorkspaceFolder}/decompile/game/,type=bind",
+		//"source=${env:HOME}/Documents/Electronic Arts/The Sims 4,target=${containerWorkspaceFolder}/Documents/Electronic Arts/The Sims 4,type=bind"
+		// ***********************************************
+		// ***********************************************
+		// Windows Mounts
+		//"source=C:/Program Files/EA Games/The Sims 4,target=${containerWorkspaceFolder}/decompile/game/,type=bind",
+		//"source=${env:USERPROFILE}/Documents/Electronic Arts/The Sims 4,target=${containerWorkspaceFolder}/Documents/Electronic Arts/The Sims 4,type=bind"
+		// ***********************************************
+		// ***********************************************
+		// Windows WSL Mounts 
+		//"source=/mnt/c/Program Files/EA Games/The Sims 4,target=${containerWorkspaceFolder}/decompile/game/,type=bind",
+		//"source=${env:USERPROFILE}/Documents/Electronic Arts/The Sims 4,target=${containerWorkspaceFolder}/Documents/Electronic Arts/The Sims 4,type=bind"
+		"source=/mnt/d/SteamLibrary/steamapps/common/The Sims 4,target=${containerWorkspaceFolder}/decompile/game/,type=bind",
+		"source=${env:USERPROFILE}/Documents/Electronic Arts/The Sims 4,target=${containerWorkspaceFolder}/Documents/Electronic Arts/The Sims 4,type=bind"
+	]
+}

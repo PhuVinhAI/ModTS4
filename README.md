@@ -1,0 +1,262 @@
+# Sims 4 Workspace
+
+One project to manage all your The Sims 4 mods. This will assist with decompiling the game's python scripts, compiling
+your mods for development and for release, and data-mining game `.package` files.
+
+## Cloning the Repository and Initial Setup
+
+To get started, clone the repository and initialize the submodule:
+
+```sh
+git clone https://github.com/ssinakhot/sims4-workspace.git
+cd sims4-workspace
+git submodule update --init --recursive
+```
+
+## Updating the Submodule
+
+To update the submodule to the latest version, use the following commands:
+
+```sh
+cd sims4-workspace
+git submodule update --remote
+```
+
+## Loading the Project from WSL using Devcontainer
+
+To load the project from WSL using VSCode, follow these steps:
+
+1. Open your WSL terminal and navigate to your home directory or any directory where you want to clone the project:
+    ```sh
+    cd ~
+    ```
+
+2. Clone the repository from within WSL using the instructions above.
+
+3. Run the setup script to configure the environment:
+    ```sh
+    .devcontainer/wsl-setup.sh
+    ```
+
+4. Open VSCode and use the Remote - WSL extension to open the project folder:
+    ```sh
+    code .
+    ```
+
+5. Once the project is open in VSCode, you can open it in the devcontainer by selecting the `Reopen in Container` option from the Command Palette (Ctrl+Shift+P).
+
+This will set up the development environment inside a container, allowing you to work on the project seamlessly.
+
+## Scripts
+
+### compile.py
+This compiles and packages your `src` folder and creates a `build` folder containing your packaged mod ready for
+deployment. It then copies your packaged mod to the games Mods folder under it's own sub-folder
+`Mods/YourName_ProjectName/YourName_ProjectName.ts4script`.
+
+### decompile.py
+This decompiles the game's python scripts and places them into a global projects folder. Throughout the process it prints
+a pretty progress meter and at the end of each module it decompiled it shows the success and fail stats as well as how
+long it took. It does this again at the end of the whole decompilation. It also clears out the old decompiled files for
+you and overall makes everything very smooth and simple.
+
+### debug_setup.py and debug_teardown.py
+
+These create and remove a debugging environment so that you can debug your game with a real debugger. The only downside
+is that it requires PyCharm Pro, which is a paid program that costs money. There's no other known way to do this. If
+you have PyCharm Pro then this will access the debugging capability in it and create 2 mods.
+
+* `pycharm-debug-capability.ts4script` which gives the Sims 4 capability to debug by connecting to PyCharm Pro
+* `pycharm-debug-cmd.ts4script` which creates a cheat code `pycharm.debug` you can enter in-game which will active
+debugging for the rest of the game.
+
+Both the cheatcode and `debug_setup.py` give clear and well-written instructions informing you of what to do and how
+to set it up or what to expect. I've also written a
+[tutorial](https://medium.com/analytics-vidhya/the-sims-4-modern-python-modding-debugging-3736b37dbd9f) on how to
+use it.
+
+As the instructions say, run `debug_teardown.py` when not debugging because it can otherwise slow down your game.
+Sigma1202 is the person who discovered this, I just made it into a script.
+
+### devmode.py
+
+This enters into a special mode called "Dev Mode", it clears out compiled code and links your src folder to the
+Mod Folder. When Dev Mode is activated, you don't need to compile anymore. If you run `compile.py` though it will exit
+Dev Mode and do a normal compile.
+
+When inside of Dev Mode you can enter the cheat `devmode.reload [path.to.module]`, it'll reload the file live while
+the game is running so it doesn't need to be closed and re-opened. For example, to reload main.py enter
+`devmode.reload main`. You can also enter paths to folders which will reload the entire folder or just not specify a
+path which will reload the entire project.
+
+This only works in devmode.
+
+### datamine.py
+
+Tools for parsing and extracting data from Sims 4 `.package` files (DBPF v2.0 format).
+
+```sh
+# Show package info (resource types, entry counts)
+python datamine.py info path/to/file.package
+
+# Extract tuning XML from a single package
+python datamine.py extract path/to/file.package -o output_dir/
+
+# Extract resources from all game packages
+python datamine.py extract-all /path/to/game -o output_dir/
+```
+
+#### extract-all
+
+Bulk-extracts resources from all game packages with smart processing for known types and raw `.bin` fallback for everything else.
+
+```sh
+# Default: tuning XML, string tables, and images
+python datamine.py extract-all /path/to/game -o output/
+
+# Extract everything (smart processing for known types, raw .bin for others)
+python datamine.py extract-all /path/to/game -o output/ --types all
+
+# Extract specific types by label or hex ID
+python datamine.py extract-all /path/to/game -o output/ --types STBL PNG
+python datamine.py extract-all /path/to/game -o output/ --types 0x034AEECB
+```
+
+**Smart processing** is applied to known resource types:
+
+| Type | Output |
+|------|--------|
+| CombinedTuning | Individual `.xml` files per tuning entry, organized by class (e.g., `xml/Skill/`, `xml/Career/`) |
+| String Table (STBL) | Merged `strings.json` with hex hash keys |
+| DDS/DST images | Converted to `.png` |
+| PNG images | Passed through as `.png` |
+| Unknown types | Raw `.bin` files organized by type ID |
+
+**Supported `--types` labels:** `tuning`, `combinedtuning`, `stbl`, `dds`, `dst`, `png`, `simdata`, `data`, `objd`, `casp`, `cobj`, `jazz`, `clip`, `geom`, `modl`, `rig`. You can also pass hex IDs like `0x034AEECB`. See [RESOURCE_TYPES.md](RESOURCE_TYPES.md) for the full list of known resource types.
+
+### fix_tuning_names.py
+
+This expects you to have extracted the tuning files from `Sims 4 Studio` with the `Sub-Folders` option checked. What
+this does is go through each and every tuning file and rename it to a much cleaner and better name.
+
+### sync_packages.py
+
+Running this script searches the top-level assets folder for any `.package` files and then copies them to your
+Mod Name Folder alongside your scripts. It's automatically run with `compile.py` and `devmode.py` and you can run it
+anytime yourself.
+
+### bundle_build.py
+
+Zips up the build artifacts in a way that can be sent to Sims 4 Players or Mod Websites. It nests all the build
+artifacts in a subfolder named `CreatorName_ProjectName`. This way the player can directly unzip your mod into the Mods
+folder and it will all be self-contained in it's own folder.
+
+### cleanup.py
+
+Removes all build artifacts
+
+* The build folder
+* The Mod Name folder in Mods
+* Debug functionality
+
+When completed, all traces of anything built by the project template for your mod will be removed leaving a fresh slate.
+This is common when you just want to clean everything up, especially after your all done developing and want to
+essentially "Un-Build" and "Un-Make" everything.
+
+## Testing
+
+The project includes a pytest-based test suite. Run tests from the project root:
+
+```sh
+pytest
+pytest -v  # verbose output
+```
+
+## Project Structure
+
+```
+├── src/               # Your mod source code
+├── build/             # Compiled output (generated)
+├── assets/            # .package files to include with the mod
+├── util/              # Core library modules
+│   └── datamining/    # .package file parser, tuning splitter, image decoder
+├── game_mods/         # In-game mod scripts (loaded by Sims 4 engine)
+├── tests/             # Test suite
+├── decompile/         # Decompilation input/output
+├── .devcontainer/     # Dev container config and setup scripts
+├── pycdc/             # Git submodule: decompiler tool
+└── unpyc37/           # Git submodule: decompiler tool
+```
+
+## Requirements
+
+This project requires **Python 3.7** (the version embedded in The Sims 4 engine). All code must remain compatible with Python 3.7.
+
+### Dev Container (recommended)
+
+If you use VS Code with the Dev Containers extension, simply open the project and select **Reopen in Container**. The container installs Python 3.7, pip, and all dependencies automatically.
+
+**Important:** Before opening the container, you must update the mount paths in `.devcontainer/devcontainer.json` to match your system. The `mounts` section contains commented-out examples for macOS, Windows, and WSL — uncomment the pair that matches your setup and adjust the paths to point to your Sims 4 installation and Documents folder:
+
+```jsonc
+"mounts": [
+    // Game files (decompilation source)
+    "source=<path to The Sims 4>,target=${containerWorkspaceFolder}/decompile/game/,type=bind",
+    // Mods folder (compilation target)
+    "source=<path to Documents/Electronic Arts/The Sims 4>,target=${containerWorkspaceFolder}/Documents/Electronic Arts/The Sims 4,type=bind"
+]
+```
+
+Common game install locations:
+- **Windows:** `C:/Program Files/EA Games/The Sims 4`
+- **Windows (Steam):** `C:/Program Files (x86)/Steam/steamapps/common/The Sims 4`
+- **WSL:** `/mnt/c/Program Files/EA Games/The Sims 4`
+- **macOS:** `/Applications/EA Games/The Sims 4.app/Contents`
+
+### Manual Setup (without Dev Container)
+
+1. Install [Python 3.7](https://www.python.org/downloads/release/python-3717/). On Linux you can use the [deadsnakes PPA](https://launchpad.net/~deadsnakes/+archive/ubuntu/ppa):
+    ```sh
+    sudo add-apt-repository ppa:deadsnakes/ppa
+    sudo apt-get update
+    sudo apt-get install python3.7 python3.7-distutils python3.7-dev
+    ```
+
+2. Install pip for Python 3.7 (if not already available):
+    ```sh
+    wget https://bootstrap.pypa.io/pip/3.7/get-pip.py
+    python3.7 get-pip.py
+    rm get-pip.py
+    ```
+
+3. Install dependencies:
+    ```sh
+    pip install -r requirements.txt
+    ```
+
+4. Initialize git submodules (needed for decompilation):
+    ```sh
+    git submodule update --init --recursive
+    ```
+
+5. Copy `settings.py.example` to `settings.py` and update the settings to match your environment.
+
+## How to get started with this
+
+1. Download it to your computer wherever you like, this will be your project folder for one project.
+2. Rename the folder to the name of your project.
+3. Follow the **Manual Setup** steps above to install Python 3.7 and dependencies.
+4. If you don't already have the library decompiled, run `decompile.py`.
+5. Using your favorite editor whether it be `Sublime`, `Notepad++`, `Visual Studio Code`, `PyCharm`, or wherever begin
+adding files to the `src` folder.
+6. Run `compile.py` and test it out.
+
+## Credits
+
+Project [Sims4ScriptingBPProj](https://github.com/junebug12851/Sims4ScriptingBPProj)\
+Copyright (c) 2021 [junebug12851](https://github.com/junebug12851)\
+Licensed [Apache2](https://www.apache.org/licenses/LICENSE-2.0)
+
+Project [Sims4ScriptingTemplate](https://github.com/mycroftjr/Sims4ScriptingTemplate)\
+Copyright (c) 2023 [mycroftjr](https://github.com/mycroftjr)\
+Licensed [Apache2](https://www.apache.org/licenses/LICENSE-2.0)
