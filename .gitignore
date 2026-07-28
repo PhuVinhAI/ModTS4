@@ -174,3 +174,7 @@ settings.py
 Documents
 
 extraction
+
+# .NET build output for Ts4PackageTool
+**/bin/
+**/obj/

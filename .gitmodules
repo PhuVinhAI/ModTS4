@@ -5,3 +5,6 @@
 	path = pycdc
 	url = https://github.com/zrax/pycdc.git
 	ignore = all
+[submodule "vendor/LlamaLogic"]
+	path = vendor/LlamaLogic
+	url = https://github.com/Llama-Logic/LlamaLogic.git

@@ -425,12 +425,19 @@ Sau đó chạy `compile.py`. File được copy vào cả `build/` và `Mods\to
 
 Không đặt asset trong folder con vì sync hiện tại chỉ đọc top-level. Đặt tên file duy nhất để tránh ghi đè asset khác.
 
-Workspace đọc và extract `.package`, nhưng không có editor DBPF để author tuning/STBL hoàn chỉnh. Thường dùng Sims 4 Studio để:
+Workspace tạo `.package` bằng CLI .NET 8 trong `tools/Ts4PackageTool`, dùng
+`LlamaLogic.Packages 3.8.2`. Builder Python gọi
+`util.datamining.package_writer.write_package()`; không còn tự ghi header/index
+DBPF và không cần thao tác GUI trong Sims 4 Studio để build tuning/STBL.
 
-- Tạo tuning override hoặc custom tuning.
-- Tạo STBL/localization resource.
-- Import icon/hình ảnh.
-- Tạo CAS/object resource.
+- Tuning override, custom tuning và STBL được đưa vào package bằng code.
+- Ảnh 2D PNG/DDS có thể bổ sung qua API chuyển đổi của LlamaLogic.
+- Sims 4 Studio vẫn hữu ích để kiểm tra trực quan hoặc xử lý CAS/object, nhưng
+  không phải dependency của pipeline build hiện tại.
+- Lần chạy đầu cần .NET 8 SDK và mạng để restore NuGet; các lần sau dùng bản đã
+  build trong máy.
+- Source và API docs của LlamaLogic đã clone local tại `vendor\LlamaLogic`; xem
+  `docs\LLAMALOGIC_PACKAGES_LOCAL.md` để tra cứu offline.
 
 Nếu mod hiển thị text tiếng Việt:
 
@@ -438,7 +445,7 @@ Nếu mod hiển thị text tiếng Việt:
 - Nên dùng STBL cho text UI có localization thay vì hardcode trong Python.
 - TS4 không có locale tiếng Việt chính thức; nếu người chơi dùng `en_US`, cần đặt chuỗi tiếng Việt vào STBL của locale mà mod hỗ trợ/test.
 - Giữ key/hash STBL ổn định khi cập nhật mod.
-- `datamine.py` đọc được STBL game, nhưng cần Sims 4 Studio hoặc công cụ tương đương để tạo/sửa `.package` phát hành.
+- `datamine.py` đọc được STBL game; package phát hành được tạo bằng LlamaLogic qua pipeline code-first của workspace.
 
 Sau khi sửa `.package`, khởi động lại game; `devmode.reload` không reload resource DBPF.
 

@@ -186,6 +186,24 @@ A general-purpose library for reading The Sims 4 `.package` files. Has no knowle
 - `extract_by_type()` filters entries by type ID
 - `is_compressed` is True only when the compressed flag is set AND file_size differs from mem_size
 
+### 9.2 Package Authoring
+
+Release `.package` files are authored through the repository's .NET 8 package
+tool, which pins `LlamaLogic.Packages` version `3.8.2`. Python code must not
+serialize DBPF headers or resource indexes itself.
+
+`util.datamining.package_writer.write_package()` is the Python 3.7-compatible
+entry point. It writes resource payloads and a manifest to a temporary folder,
+invokes the .NET tool, and lets `LlamaLogic.Packages.DataBasePackedFile` create
+the final package.
+
+**Invariants:**
+- Resource keys are unique `(type, group, instance)` tuples; duplicates fail before output is written
+- Resources are written in type/group/instance order
+- Package creation and update timestamps are fixed so identical inputs produce identical bytes
+- The NuGet dependency uses a committed lock file
+- A missing or failed .NET tool build raises an actionable Python exception and never falls back to the legacy handwritten DBPF serializer
+
 ### 11.2 CombinedTuning
 
 CombinedTuning (resource type `0x62E94D38`) contains all tuning for a game package in one resource.

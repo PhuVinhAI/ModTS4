@@ -1,9 +1,13 @@
-import struct
-
 import pytest
 
 from util.datamining.package_reader import PackageReader
-from util.datamining.package_writer import PackageResource, build_package
+from util.datamining.package_writer import (
+    LLAMALOGIC_PACKAGES_VERSION,
+    PackageResource,
+    build_package,
+    package_tool_version,
+    write_package,
+)
 
 
 def test_build_package_round_trips_uncompressed_resources(tmp_path):
@@ -12,16 +16,15 @@ def test_build_package_round_trips_uncompressed_resources(tmp_path):
         PackageResource(0x220557DA, 0x80000000, 0xAABBCCDD, b"STBL data"),
     ]
 
-    package_data = build_package(resources)
     package_path = tmp_path / "anime.package"
-    package_path.write_bytes(package_data)
+    write_package(resources, str(package_path))
+    package_data = package_path.read_bytes()
 
     reader = PackageReader(str(package_path))
     reader.read()
 
     assert reader.header.major_version == 2
     assert reader.header.minor_version == 1
-    assert reader.header.index_size == 4 + 32 * 2
     assert len(reader.entries) == 2
     extracted = {
         (entry.key.type_id, entry.key.group, entry.key.instance):
@@ -32,8 +35,7 @@ def test_build_package_round_trips_uncompressed_resources(tmp_path):
         (0xE882D22F, 0, 0x123456789ABCDEF0): b"<I />",
         (0x220557DA, 0x80000000, 0xAABBCCDD): b"STBL data",
     }
-    assert struct.unpack_from("<I", package_data, 44)[0] == 4 + 32 * 2
-    assert struct.unpack_from("<I", package_data, 60)[0] == 3
+    assert package_data.startswith(b"DBPF")
 
 
 def test_build_package_is_deterministic():
@@ -53,3 +55,21 @@ def test_build_package_rejects_duplicate_keys():
 
     with pytest.raises(ValueError, match="Duplicate resource key"):
         build_package(resources)
+
+
+def test_write_package_rejects_duplicate_keys_without_writing(tmp_path):
+    output_path = tmp_path / "duplicate.package"
+    resources = [
+        PackageResource(1, 2, 3, b"first"),
+        PackageResource(1, 2, 3, b"second"),
+    ]
+
+    with pytest.raises(ValueError, match="Duplicate resource key"):
+        write_package(resources, str(output_path))
+
+    assert not output_path.exists()
+
+
+def test_package_tool_uses_pinned_llamalogic_version():
+    assert LLAMALOGIC_PACKAGES_VERSION == "3.8.2"
+    assert package_tool_version() == LLAMALOGIC_PACKAGES_VERSION

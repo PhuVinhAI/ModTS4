@@ -14,7 +14,7 @@ from src.anime_tv.constants import (
     TUNING_NAME,
 )
 from util.datamining.package_reader import PackageReader
-from util.datamining.package_writer import PackageResource, build_package
+from util.datamining.package_writer import PackageResource, write_package
 from util.datamining.resource_types import STRING_TABLE_TYPE_ID
 from util.datamining.tuning_splitter import split_combined_tuning
 
@@ -175,6 +175,4 @@ def build_anime_package(game_folder, output_path):
     output_dir = os.path.dirname(output_path)
     if output_dir:
         os.makedirs(output_dir, exist_ok=True)
-    with open(output_path, "wb") as package_file:
-        package_file.write(build_package(resources))
-    return output_path
+    return write_package(resources, output_path)

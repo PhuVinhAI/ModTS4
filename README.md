@@ -154,6 +154,24 @@ Running this script searches the top-level assets folder for any `.package` file
 Mod Name Folder alongside your scripts. It's automatically run with `compile.py` and `devmode.py` and you can run it
 anytime yourself.
 
+### Package authoring
+
+Generated `.package` files are written by the .NET 8 tool in
+`tools/Ts4PackageTool`, using the pinned NuGet package
+`LlamaLogic.Packages 3.8.2`. Python builders call
+`util.datamining.package_writer.write_package()`; there is no handwritten DBPF
+writer or Sims 4 Studio GUI step in that path. The tool restores/builds
+automatically the first time it is used.
+
+`LlamaLogic.Packages` also supports PNG/DDS conversion for future 2D assets.
+Sims 4 Studio remains useful for visual inspection and object/CAS workflows,
+but is not required to build the current tuning and STBL package.
+
+Source, API HTML/YAML docs and upstream unit tests are available offline in the
+`vendor/LlamaLogic` submodule. See
+[`docs/LLAMALOGIC_PACKAGES_LOCAL.md`](docs/LLAMALOGIC_PACKAGES_LOCAL.md) for the
+local API map and update commands.
+
 ### bundle_build.py
 
 Zips up the build artifacts in a way that can be sent to Sims 4 Players or Mod Websites. It nests all the build
@@ -199,7 +217,7 @@ pytest -v  # verbose output
 
 ## Requirements
 
-This project requires **Python 3.7** (the version embedded in The Sims 4 engine). All code must remain compatible with Python 3.7.
+This project requires **Python 3.7** (the version embedded in The Sims 4 engine) and the **.NET 8 SDK or newer** for package authoring. All Python code loaded by the game must remain compatible with Python 3.7.
 
 ### Dev Container (recommended)
 
@@ -248,7 +266,12 @@ Common game install locations:
     git submodule update --init --recursive
     ```
 
-5. Copy `settings.py.example` to `settings.py` and update the settings to match your environment.
+5. Install the [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0), then restore the locked package-tool dependencies:
+    ```sh
+    dotnet restore tools/Ts4PackageTool/Ts4PackageTool.csproj --locked-mode
+    ```
+
+6. Copy `settings.py.example` to `settings.py` and update the settings to match your environment.
 
 ## How to get started with this
 
