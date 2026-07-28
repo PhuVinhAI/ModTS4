@@ -145,6 +145,35 @@ def package_tool_version():
     return _run_tool("version")
 
 
+def encode_string_table(strings):
+    # type: (dict) -> bytes
+    """Encode a version 5 STBL using LlamaLogic.Packages.StringTableModel."""
+    normalized = {}
+    for key, value in sorted(strings.items()):
+        if not isinstance(key, int) or not 0 <= key <= 0xFFFFFFFF:
+            raise ValueError("STBL key is outside uint32: {}".format(key))
+        if not isinstance(value, str):
+            raise TypeError("STBL value for 0x{:08X} must be text".format(key))
+        if len(value.encode("utf-8")) > 0xFFFF:
+            raise ValueError("STBL string is too long for key 0x{:08X}".format(key))
+        normalized["{:08X}".format(key)] = value
+
+    with tempfile.TemporaryDirectory(prefix="ts4-stbl-") as temp_directory:
+        manifest_path = os.path.join(temp_directory, "strings.json")
+        output_path = os.path.join(temp_directory, "output.stbl")
+        with open(manifest_path, "w", encoding="utf-8") as manifest_file:
+            json.dump({"strings": normalized}, manifest_file, ensure_ascii=False, indent=2)
+        _run_tool("encode-stbl", manifest_path, output_path)
+        with open(output_path, "rb") as output_file:
+            return output_file.read()
+
+
+def validate_package(package_path):
+    # type: (str) -> str
+    """Validate package structure and supported models with LlamaLogic."""
+    return _run_tool("validate", os.path.abspath(package_path))
+
+
 def write_package(resources, output_path):
     # type: (Iterable[PackageResource], str) -> str
     """Write resources to a DBPF package using LlamaLogic.Packages."""

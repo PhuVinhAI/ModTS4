@@ -39,6 +39,16 @@ Start-Process (Resolve-Path .\vendor\LlamaLogic\docs\packages\LlamaLogic.Package
 `tools/Ts4PackageTool/Program.cs` là ví dụ thực tế đang chạy trên Windows.
 Python gọi nó qua `util/datamining/package_writer.py`; không tự serialize DBPF.
 
+Các lệnh workspace hiện hỗ trợ:
+
+```powershell
+dotnet tools\Ts4PackageTool\bin\Release\net8.0\Ts4PackageTool.dll version
+dotnet tools\Ts4PackageTool\bin\Release\net8.0\Ts4PackageTool.dll validate assets\tomis_AnimeTV.package
+```
+
+`encode-stbl` là bridge nội bộ được Python gọi để tạo payload bằng
+`StringTableModel`; không tự ghi header STBL trong Python.
+
 ### Tạo package tuning/STBL
 
 ```csharp

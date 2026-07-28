@@ -1,6 +1,10 @@
 import pytest
 
-from util.datamining.tuning_splitter import split_combined_tuning, SplitEntry
+from util.datamining.tuning_splitter import (
+    SplitEntry,
+    find_combined_tuning_by_name,
+    split_combined_tuning,
+)
 
 
 # CombinedTuning with shared <g> reference table
@@ -86,6 +90,17 @@ NESTED_REFS = b"""\
 
 
 class TestSplitCombinedTuning:
+    def test_find_by_name_resolves_only_requested_entry(self):
+        entry = find_combined_tuning_by_name(COMBINED_WITH_REFS, "skill_Cooking")
+
+        assert entry is not None
+        assert entry.name == "skill_Cooking"
+        assert "MAJOR" in entry.xml
+        assert "<r " not in entry.xml
+
+    def test_find_by_name_returns_none_for_missing_entry(self):
+        assert find_combined_tuning_by_name(COMBINED_WITH_REFS, "missing") is None
+
     def test_basic_split(self):
         entries = split_combined_tuning(COMBINED_WITH_REFS)
         assert len(entries) == 3

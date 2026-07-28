@@ -415,8 +415,16 @@ installed base-game television tuning. The generated package contains:
 - The base-game kids television channel, animation, motives and viewing mood
   effects, so the mod does not require custom video or animation assets.
 
+The builder must resolve the effective `tv_WatchKids` tuning in patch order:
+`SimulationDeltaBuild0.package` first, then `SimulationFullBuild0.package` as
+fallback. This prevents a game update from cloning the stale full-build copy.
+STBL payloads must be encoded with LlamaLogic's `StringTableModel`; handwritten
+STBL headers are not accepted by the build pipeline.
+
 The package builder must produce a valid, deterministic, uncompressed DBPF
-v2.1 package. Duplicate resource keys are rejected.
+v2.1 package. Duplicate resource keys are rejected. The LlamaLogic validator
+must decode all STBL resources and verify that the interaction XML `s` value
+matches its DBPF instance ID.
 
 ### 16.2 Runtime Behavior
 

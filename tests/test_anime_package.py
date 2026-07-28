@@ -1,4 +1,5 @@
 import xml.etree.ElementTree as ET
+import struct
 
 import util.anime_package as anime_package
 from src.anime_tv.constants import (
@@ -12,6 +13,8 @@ from src.anime_tv.constants import (
 from util.anime_package import build_stbl, customize_watch_tuning, fnv1a_32, fnv1a_64
 from util.datamining.string_table import StringTableReader
 from util.datamining.package_reader import PackageReader
+from util.datamining.package_writer import PackageResource, validate_package, write_package
+from util.datamining.resource_types import COMBINED_TUNING_TYPE_ID
 
 
 BASE_TUNING = b"""\
@@ -72,6 +75,31 @@ def test_build_stbl_preserves_vietnamese_strings():
     assert table.version == 5
     assert table[DISPLAY_NAME_KEY] == "Xem Anime"
     assert table[DISPLAY_TOOLTIP_KEY] == "Thư giãn với một tập anime."
+    expected_length = sum(
+        len(value.encode("utf-8")) + 1 for value in table.strings.values()
+    )
+    assert struct.unpack_from("<I", data, 17)[0] == expected_length
+
+
+def test_load_base_watch_tuning_prefers_delta_override(tmp_path):
+    simulation_path = tmp_path / "Data" / "Simulation"
+    simulation_path.mkdir(parents=True)
+    full_tuning = BASE_TUNING
+    delta_tuning = BASE_TUNING.replace(b">9101</T>", b">9123</T>")
+
+    for package_name, tuning in (
+        ("SimulationFullBuild0.package", full_tuning),
+        ("SimulationDeltaBuild0.package", delta_tuning),
+    ):
+        combined = b"<combined><R>" + tuning + b"</R></combined>"
+        write_package(
+            [PackageResource(COMBINED_TUNING_TYPE_ID, 0, 1, combined)],
+            str(simulation_path / package_name),
+        )
+
+    result = anime_package.load_base_watch_tuning(str(tmp_path))
+
+    assert _text_for_name(ET.fromstring(result), "required_channel") == "9123"
 
 
 def test_build_anime_package_contains_tuning_and_all_locales(tmp_path, monkeypatch):
@@ -91,3 +119,4 @@ def test_build_anime_package_contains_tuning_and_all_locales(tmp_path, monkeypat
     assert len(tuning_entries) == 1
     assert tuning_entries[0].key.instance == ANIME_INTERACTION_ID
     assert len(stbl_entries) == len(anime_package.LOCALE_IDS)
+    assert validate_package(str(output_path)).startswith("Valid package: 19 resources")

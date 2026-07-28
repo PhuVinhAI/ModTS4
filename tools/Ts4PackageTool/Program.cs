@@ -1,6 +1,9 @@
 using System.Globalization;
+using System.Text;
 using System.Text.Json;
+using System.Xml.Linq;
 using LlamaLogic.Packages;
+using LlamaLogic.Packages.Models;
 
 return ProgramEntry.Run(args);
 
@@ -27,9 +30,23 @@ static class ProgramEntry
                 return 0;
             }
 
+            if (args.Length == 3 && args[0] == "encode-stbl")
+            {
+                EncodeStringTable(args[1], args[2]);
+                return 0;
+            }
+
+            if (args.Length == 2 && args[0] == "validate")
+            {
+                ValidatePackage(args[1]);
+                return 0;
+            }
+
             Console.Error.WriteLine("Usage:");
             Console.Error.WriteLine("  Ts4PackageTool version");
             Console.Error.WriteLine("  Ts4PackageTool create <manifest.json> <output.package>");
+            Console.Error.WriteLine("  Ts4PackageTool encode-stbl <strings.json> <output.stbl>");
+            Console.Error.WriteLine("  Ts4PackageTool validate <input.package>");
             return 2;
         }
         catch (Exception exception)
@@ -37,6 +54,75 @@ static class ProgramEntry
             Console.Error.WriteLine(exception.Message);
             return 1;
         }
+    }
+
+    static void EncodeStringTable(string manifestPath, string outputPath)
+    {
+        manifestPath = Path.GetFullPath(manifestPath);
+        outputPath = Path.GetFullPath(outputPath);
+        var manifest = JsonSerializer.Deserialize<StringTableManifest>(
+            File.ReadAllText(manifestPath), jsonOptions)
+            ?? throw new InvalidDataException("String table manifest is empty.");
+        if (manifest.Strings is null)
+            throw new InvalidDataException("String table manifest has no strings object.");
+
+        var strings = manifest.Strings
+            .Select(entry => new KeyValuePair<uint, string>(
+                ParseHexUInt32(entry.Key, "string table key"),
+                entry.Value ?? throw new InvalidDataException(
+                    $"String table value for {entry.Key} is null.")))
+            .OrderBy(entry => entry.Key)
+            .ToList();
+        if (strings.Select(entry => entry.Key).Distinct().Count() != strings.Count)
+            throw new InvalidDataException("String table manifest has duplicate keys.");
+
+        var model = new StringTableModel();
+        foreach (var entry in strings)
+            model.Set(entry.Key, entry.Value);
+
+        var outputDirectory = Path.GetDirectoryName(outputPath);
+        if (!string.IsNullOrEmpty(outputDirectory))
+            Directory.CreateDirectory(outputDirectory);
+        File.WriteAllBytes(outputPath, model.Encode().ToArray());
+    }
+
+    static void ValidatePackage(string packagePath)
+    {
+        packagePath = Path.GetFullPath(packagePath);
+        using var package = new DataBasePackedFile(packagePath);
+        var interactionTuningCount = 0;
+        var stringTableCount = 0;
+
+        foreach (var key in package.Keys)
+        {
+            if (key.Type is ResourceType.StringTable)
+            {
+                package.GetModel<StringTableModel>(key);
+                ++stringTableCount;
+            }
+            else if (key.Type is ResourceType.InteractionTuning)
+            {
+                var content = package.Get(key);
+                var document = XDocument.Parse(Encoding.UTF8.GetString(content.Span));
+                var root = document.Root
+                    ?? throw new InvalidDataException($"Interaction tuning {key.FullTgi} has no root element.");
+                var instanceText = root.Attribute("s")?.Value
+                    ?? throw new InvalidDataException($"Interaction tuning {key.FullTgi} has no s attribute.");
+                if (!ulong.TryParse(instanceText, NumberStyles.None, CultureInfo.InvariantCulture, out var instance)
+                    || instance != key.FullInstance)
+                    throw new InvalidDataException(
+                        $"Interaction tuning {key.FullTgi} has mismatched XML instance {instanceText}.");
+                ++interactionTuningCount;
+            }
+            else
+            {
+                package.Get(key);
+            }
+        }
+
+        Console.WriteLine(
+            $"Valid package: {package.Count} resources, {interactionTuningCount} interaction tuning, " +
+            $"{stringTableCount} string tables.");
     }
 
     static void CreatePackage(string manifestPath, string outputPath)
@@ -140,6 +226,11 @@ static class ProgramEntry
 sealed class PackageManifest
 {
     public List<ResourceManifest>? Resources { get; init; } = [];
+}
+
+sealed class StringTableManifest
+{
+    public Dictionary<string, string?>? Strings { get; init; }
 }
 
 sealed class ResourceManifest

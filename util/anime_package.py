@@ -1,7 +1,6 @@
 """Build the tuning and localization package for the Xem Anime interaction."""
 
 import os
-import struct
 import xml.etree.ElementTree as ET
 
 from src.anime_tv.constants import (
@@ -14,14 +13,22 @@ from src.anime_tv.constants import (
     TUNING_NAME,
 )
 from util.datamining.package_reader import PackageReader
-from util.datamining.package_writer import PackageResource, write_package
+from util.datamining.package_writer import (
+    PackageResource,
+    encode_string_table,
+    write_package,
+)
 from util.datamining.resource_types import STRING_TABLE_TYPE_ID
-from util.datamining.tuning_splitter import split_combined_tuning
+from util.datamining.tuning_splitter import find_combined_tuning_by_name
 
 
 INTERACTION_RESOURCE_TYPE_ID = 0xE882D22F
 TUNING_GROUP = 0x00000000
 STBL_GROUP = 0x80000000
+SIMULATION_TUNING_PACKAGES = (
+    "SimulationDeltaBuild0.package",
+    "SimulationFullBuild0.package",
+)
 
 LOCALE_IDS = (
     0x00,
@@ -67,24 +74,8 @@ def fnv1a_64(value):
 
 
 def build_stbl(strings):
-    """Encode a key-to-string mapping as an uncompressed version 5 STBL."""
-    encoded = [
-        (key, value.encode("utf-8")) for key, value in sorted(strings.items())
-    ]
-    string_data_length = sum(len(value) for _, value in encoded)
-    header = b"STBL"
-    header += struct.pack("<H", 5)
-    header += struct.pack("<B", 0)
-    header += struct.pack("<Q", len(encoded))
-    header += struct.pack("<H", 0)
-    header += struct.pack("<I", string_data_length)
-
-    entries = []
-    for key, value in encoded:
-        if len(value) > 0xFFFF:
-            raise ValueError("STBL string is too long for key 0x{:08X}".format(key))
-        entries.append(struct.pack("<IBH", key, 0, len(value)) + value)
-    return header + b"".join(entries)
+    """Encode strings with LlamaLogic's authoritative STBL model."""
+    return encode_string_table(strings)
 
 
 def _find_named_element(root, name):
@@ -100,6 +91,11 @@ def customize_watch_tuning(base_xml):
         root = ET.fromstring(base_xml)
     else:
         root = ET.fromstring(base_xml.encode("utf-8"))
+
+    if root.get("n") != BASE_TUNING_NAME:
+        raise ValueError("Unexpected base tuning: {}".format(root.get("n")))
+    if root.get("s") != str(BASE_WATCH_INTERACTION_ID):
+        raise ValueError("Unexpected base tuning ID: {}".format(root.get("s")))
 
     for element in root.iter():
         element.attrib.pop("x", None)
@@ -132,21 +128,26 @@ def customize_watch_tuning(base_xml):
 
 
 def load_base_watch_tuning(game_folder):
-    package_path = os.path.join(
-        game_folder, "Data", "Simulation", "SimulationFullBuild0.package"
-    )
-    reader = PackageReader(package_path)
-    reader.read()
-    combined_entries = reader.extract_combined_tuning_entries()
-    if not combined_entries:
-        raise ValueError("Base game package contains no CombinedTuning resource")
-
-    for combined_entry in combined_entries:
-        data = reader.extract_resource(combined_entry)
-        for tuning in split_combined_tuning(data):
-            if tuning.name == BASE_TUNING_NAME:
+    """Load the effective game tuning, preferring patch overrides in Delta."""
+    simulation_folder = os.path.join(game_folder, "Data", "Simulation")
+    searched = []
+    for package_name in SIMULATION_TUNING_PACKAGES:
+        package_path = os.path.join(simulation_folder, package_name)
+        if not os.path.isfile(package_path):
+            continue
+        searched.append(package_path)
+        reader = PackageReader(package_path)
+        reader.read()
+        for combined_entry in reader.extract_combined_tuning_entries():
+            data = reader.extract_resource(combined_entry)
+            tuning = find_combined_tuning_by_name(data, BASE_TUNING_NAME)
+            if tuning is not None:
                 return tuning.xml.encode("utf-8")
-    raise ValueError("Could not find base tuning '{}'".format(BASE_TUNING_NAME))
+    raise ValueError(
+        "Could not find base tuning '{}' in {}".format(
+            BASE_TUNING_NAME, ", ".join(searched) or simulation_folder
+        )
+    )
 
 
 def build_anime_package(game_folder, output_path):

@@ -68,6 +68,45 @@ def _element_to_xml(element):
     return ET.tostring(element, encoding="unicode")
 
 
+def _decode_root(data):
+    # type: (bytes) -> ET.Element
+    if is_binary_combined_tuning(data):
+        xml_str = decode_combined_tuning(data)
+    else:
+        xml_str = data.decode("utf-8")
+    return ET.fromstring(xml_str)
+
+
+def _split_entry(element, ref_table):
+    # type: (ET.Element, Dict[str, ET.Element]) -> SplitEntry
+    entry_element = copy.deepcopy(element)
+    _resolve_refs_inplace(entry_element, ref_table)
+    return SplitEntry(
+        cls=element.get("c", ""),
+        name=element.get("n", ""),
+        instance_id=element.get("s", "0"),
+        module=element.get("m", element.get("n", "")),
+        element_tag=element.tag,
+        xml=_element_to_xml(entry_element),
+    )
+
+
+def find_combined_tuning_by_name(data, name):
+    # type: (bytes, str) -> Optional[SplitEntry]
+    """Return one resolved tuning without copying every entry in the package."""
+    root = _decode_root(data)
+    ref_table = _build_ref_table(root)
+    for element in root.iter():
+        if element.tag not in ("I", "M"):
+            continue
+        if element.get("n") != name or element.get("s") is None:
+            continue
+        if element.tag == "I" and element.get("c") is None:
+            continue
+        return _split_entry(element, ref_table)
+    return None
+
+
 def split_combined_tuning(data):
     # type: (bytes) -> List[SplitEntry]
     """Split a CombinedTuning resource into individual standalone entries.
@@ -78,13 +117,7 @@ def split_combined_tuning(data):
     Returns:
         List of SplitEntry, each with resolved XML.
     """
-    # Decode binary DATA format if needed
-    if is_binary_combined_tuning(data):
-        xml_str = decode_combined_tuning(data)
-    else:
-        xml_str = data.decode("utf-8")
-
-    root = ET.fromstring(xml_str)
+    root = _decode_root(data)
     ref_table = _build_ref_table(root)
 
     entries = []  # type: List[SplitEntry]
@@ -95,17 +128,7 @@ def split_combined_tuning(data):
         if cls is None:
             continue  # skip <I> without class (not a tuning entry)
 
-        entry_el = copy.deepcopy(el)
-        _resolve_refs_inplace(entry_el, ref_table)
-
-        entries.append(SplitEntry(
-            cls=cls,
-            name=el.get("n", ""),
-            instance_id=el.get("s", "0"),
-            module=el.get("m", ""),
-            element_tag="I",
-            xml=_element_to_xml(entry_el),
-        ))
+        entries.append(_split_entry(el, ref_table))
 
     # Process <M> elements (module tuning: collection_manager, etc.)
     for el in root.iter("M"):
@@ -117,16 +140,6 @@ def split_combined_tuning(data):
         if not module or el.get("s") is None:
             continue
 
-        entry_el = copy.deepcopy(el)
-        _resolve_refs_inplace(entry_el, ref_table)
-
-        entries.append(SplitEntry(
-            cls="",
-            name=module,
-            instance_id=el.get("s", "0"),
-            module=module,
-            element_tag="M",
-            xml=_element_to_xml(entry_el),
-        ))
+        entries.append(_split_entry(el, ref_table))
 
     return entries

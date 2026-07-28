@@ -5,9 +5,12 @@ from util.datamining.package_writer import (
     LLAMALOGIC_PACKAGES_VERSION,
     PackageResource,
     build_package,
+    encode_string_table,
     package_tool_version,
+    validate_package,
     write_package,
 )
+from util.datamining.string_table import StringTableReader
 
 
 def test_build_package_round_trips_uncompressed_resources(tmp_path):
@@ -73,3 +76,25 @@ def test_write_package_rejects_duplicate_keys_without_writing(tmp_path):
 def test_package_tool_uses_pinned_llamalogic_version():
     assert LLAMALOGIC_PACKAGES_VERSION == "3.8.2"
     assert package_tool_version() == LLAMALOGIC_PACKAGES_VERSION
+
+
+def test_encode_string_table_uses_llamalogic_model():
+    strings = {0x12345678: "Xem Anime", 0xABCDEF01: "Tiếng Việt"}
+
+    data = encode_string_table(strings)
+    table = StringTableReader.parse(data)
+
+    assert table.strings == strings
+    expected_length = sum(len(value.encode("utf-8")) + 1 for value in strings.values())
+    assert int.from_bytes(data[17:21], "little") == expected_length
+
+
+def test_validate_package_rejects_mismatched_tuning_instance(tmp_path):
+    package_path = tmp_path / "invalid.package"
+    write_package(
+        [PackageResource(0xE882D22F, 0, 123, b'<I s="456" />')],
+        str(package_path),
+    )
+
+    with pytest.raises(RuntimeError, match="mismatched XML instance"):
+        validate_package(str(package_path))

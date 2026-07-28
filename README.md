@@ -163,6 +163,19 @@ Generated `.package` files are written by the .NET 8 tool in
 writer or Sims 4 Studio GUI step in that path. The tool restores/builds
 automatically the first time it is used.
 
+The Anime TV builder reads `SimulationDeltaBuild0.package` before
+`SimulationFullBuild0.package`, so an EA patch override wins over the older
+full-build tuning. STBL payloads are encoded by LlamaLogic's
+`StringTableModel`, including the format's per-entry string-length accounting.
+Validate a built package with:
+
+```powershell
+dotnet tools\Ts4PackageTool\bin\Release\net8.0\Ts4PackageTool.dll validate assets\tomis_AnimeTV.package
+```
+
+The root-cause analysis and mandatory post-update checklist are documented in
+[`docs/INCIDENT_ANIME_TV_BOOT_FAILURE_2026-07-28.md`](docs/INCIDENT_ANIME_TV_BOOT_FAILURE_2026-07-28.md).
+
 `LlamaLogic.Packages` also supports PNG/DDS conversion for future 2D assets.
 Sims 4 Studio remains useful for visual inspection and object/CAS workflows,
 but is not required to build the current tuning and STBL package.
