@@ -100,8 +100,11 @@ class PackageReader:
         # Index entry count at offset 36
         self.header.index_entry_count = struct.unpack_from("<I", data, 36)[0]
 
-        # Index offset at offset 64, index size at offset 60
-        self.header.index_size = struct.unpack_from("<I", data, 60)[0]
+        # DBPF 2.1 stores index size at 44. Keep accepting the legacy offset
+        # used by older synthetic packages in this workspace.
+        self.header.index_size = struct.unpack_from("<I", data, 44)[0]
+        if self.header.index_size == 0:
+            self.header.index_size = struct.unpack_from("<I", data, 60)[0]
         self.header.index_offset = struct.unpack_from("<I", data, 64)[0]
 
     def _read_index(self, f: BinaryIO) -> None:

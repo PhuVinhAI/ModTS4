@@ -379,3 +379,40 @@ EA's DDS variant with rearranged block data. See section 9.4 for format details.
 | Invalid STBL magic | `StringTableReader.parse()` raises `ValueError` |
 | Invalid RefPack magic | `decompress()` raises `ValueError` |
 
+---
+
+## 16. Anime TV Mod
+
+The workspace builds and installs a playable television interaction named
+`Xem Anime`.
+
+### 16.1 Tuning Package
+
+`build_anime_package.py` creates `assets/tomis_AnimeTV.package` from the
+installed base-game television tuning. The generated package contains:
+
+- A custom `WatchSuperInteraction` with a stable 64-bit instance ID.
+- Vietnamese display-name and tooltip strings in STBL resources for every
+  locale supported by the project.
+- The base-game kids television channel, animation, motives and viewing mood
+  effects, so the mod does not require custom video or animation assets.
+
+The package builder must produce a valid, deterministic, uncompressed DBPF
+v2.1 package. Duplicate resource keys are rejected.
+
+### 16.2 Runtime Behavior
+
+When object tuning finishes loading, the script mod adds the custom
+interaction to every object tuning that already exposes the base-game
+`tv_WatchKids` affordance. It must not add the interaction more than once.
+
+The `anime.watch` live command:
+
+- Uses the active Sim for the command connection.
+- Finds the nearest loaded television that exposes `tv_WatchKids`.
+- Pushes the custom interaction with user intent and high priority.
+- Reports a clear error when there is no active Sim, no compatible TV, or the
+  tuning package is missing.
+
+All runtime source remains compatible with Python 3.7.
+
